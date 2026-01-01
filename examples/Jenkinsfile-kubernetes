@@ -1,0 +1,82 @@
+// Jenkinsfile for Kubernetes deployment with Helm
+
+pipeline {
+    agent {
+        docker {
+            image 'your-dockerhub-user/jenkins-docker-agent:latest'
+            args '-v /var/run/docker.sock:/var/run/docker.sock'
+        }
+    }
+
+    environment {
+        DOCKERHUB_CREDENTIALS = credentials('DOCKERHUB_CREDENTIALS')
+        APP_NAME = 'myapp'
+        DOCKER_IMAGE = "your-dockerhub-user/${APP_NAME}"
+        K8S_NAMESPACE = 'production'
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+
+        stage('Build & Push Docker Image') {
+            steps {
+                script {
+                    sh """
+                        docker build -t ${DOCKER_IMAGE}:${BUILD_NUMBER} .
+                    """
+                    
+                    withCredentials([usernamePassword(
+                        credentialsId: 'DOCKERHUB_CREDENTIALS',
+                        usernameVariable: 'USERNAME',
+                        passwordVariable: 'PASSWORD'
+                    )]) {
+                        sh '''
+                            echo $PASSWORD | docker login -u $USERNAME --password-stdin
+                            docker push ${DOCKER_IMAGE}:${BUILD_NUMBER}
+                            docker logout
+                        '''
+                    }
+                }
+            }
+        }
+
+        stage('Deploy with Helm') {
+            when {
+                branch 'main'
+            }
+            steps {
+                withCredentials([file(credentialsId: 'KUBECONFIG', variable: 'KUBECONFIG')]) {
+                    sh """
+                        export KUBECONFIG=\$KUBECONFIG
+                        
+                        # Verify cluster connection
+                        kubectl cluster-info
+                        
+                        # Deploy with Helm
+                        helm upgrade --install ${APP_NAME} ./helm-chart \
+                            --namespace ${K8S_NAMESPACE} \
+                            --create-namespace \
+                            --set image.tag=${BUILD_NUMBER} \
+                            --set image.repository=${DOCKER_IMAGE} \
+                            --wait \
+                            --timeout 5m
+                        
+                        # Verify deployment
+                        kubectl get pods -n ${K8S_NAMESPACE}
+                        kubectl rollout status deployment/${APP_NAME} -n ${K8S_NAMESPACE}
+                    """
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            sh 'docker logout || true'
+        }
+    }
+}

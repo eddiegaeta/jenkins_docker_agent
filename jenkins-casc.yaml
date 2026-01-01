@@ -1,0 +1,70 @@
+# Jenkins Configuration as Code (JCasC)
+# This file provides basic Jenkins configuration for local development
+
+jenkins:
+  systemMessage: "Jenkins configured automatically by JCasC"
+  
+  securityRealm:
+    local:
+      allowsSignup: false
+      users:
+        - id: "admin"
+          password: "admin"
+          # Change the password after first login!
+          
+  authorizationStrategy:
+    loggedInUsersCanDoAnything:
+      allowAnonymousRead: false
+
+  numExecutors: 2
+  mode: NORMAL
+  
+  clouds:
+    - docker:
+        name: "docker-cloud"
+        dockerApi:
+          dockerHost:
+            uri: "unix:///var/run/docker.sock"
+        templates:
+          - labelString: "docker-agent"
+            dockerTemplateBase:
+              image: "your-dockerhub-user/jenkins-docker-agent:latest"
+              volumes:
+                - "/var/run/docker.sock:/var/run/docker.sock"
+              mounts:
+                - "type=bind,source=/var/run/docker.sock,destination=/var/run/docker.sock"
+            remoteFs: "/home/jenkins"
+            connector:
+              attach:
+                user: "jenkins"
+            instanceCapStr: "5"
+            retentionStrategy:
+              idleMinutes: 5
+            pullStrategy: PULL_LATEST
+
+credentials:
+  system:
+    domainCredentials:
+      - credentials:
+          # Add your credentials here or through the UI
+          - usernamePassword:
+              scope: GLOBAL
+              id: "DOCKERHUB_CREDENTIALS"
+              username: "your-dockerhub-username"
+              password: "your-dockerhub-password"
+              description: "Docker Hub Credentials"
+
+unclassified:
+  location:
+    url: "http://localhost:8080/"
+  
+  gitSCM:
+    createAccountBasedOnEmail: false
+    showEntireCommitSummaryInChanges: false
+    useExistingAccountWithSameEmail: false
+  
+tool:
+  git:
+    installations:
+      - name: "Default"
+        home: "git"

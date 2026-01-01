@@ -1,0 +1,44 @@
+// Simple Jenkinsfile example for basic Docker build and push
+
+pipeline {
+    agent {
+        docker {
+            image 'your-dockerhub-user/jenkins-docker-agent:latest'
+            args '-v /var/run/docker.sock:/var/run/docker.sock'
+        }
+    }
+
+    environment {
+        DOCKERHUB_CREDENTIALS = credentials('DOCKERHUB_CREDENTIALS')
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                git branch: 'main', url: 'https://github.com/your-org/your-repo.git'
+            }
+        }
+
+        stage('Build') {
+            steps {
+                sh 'docker build -t your-image:${BUILD_NUMBER} .'
+            }
+        }
+
+        stage('Push') {
+            steps {
+                withCredentials([usernamePassword(
+                    credentialsId: 'DOCKERHUB_CREDENTIALS',
+                    usernameVariable: 'USERNAME',
+                    passwordVariable: 'PASSWORD'
+                )]) {
+                    sh '''
+                        echo $PASSWORD | docker login -u $USERNAME --password-stdin
+                        docker push your-image:${BUILD_NUMBER}
+                        docker logout
+                    '''
+                }
+            }
+        }
+    }
+}

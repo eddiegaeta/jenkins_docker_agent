@@ -1,0 +1,279 @@
+// Complete example Jenkinsfile for Docker build, test, and deployment
+// This pipeline demonstrates the full capabilities of the jenkins-docker-agent
+
+pipeline {
+    agent {
+        docker {
+            image 'your-dockerhub-user/jenkins-docker-agent:latest'
+            args '-v /var/run/docker.sock:/var/run/docker.sock --group-add docker'
+        }
+    }
+
+    environment {
+        // Docker Hub credentials
+        DOCKERHUB_CREDENTIALS = credentials('DOCKERHUB_CREDENTIALS')
+        
+        // Application configuration
+        APP_NAME = 'myapp'
+        DOCKER_IMAGE = "your-dockerhub-user/${APP_NAME}"
+        
+        // Kubernetes configuration
+        K8S_NAMESPACE = 'production'
+        HELM_RELEASE_NAME = "${APP_NAME}"
+    }
+
+    options {
+        // Keep only the last 10 builds
+        buildDiscarder(logRotator(numToKeepStr: '10'))
+        
+        // Timeout if build takes more than 30 minutes
+        timeout(time: 30, unit: 'MINUTES')
+        
+        // Disable concurrent builds
+        disableConcurrentBuilds()
+    }
+
+    stages {
+        stage('🔍 Environment Info') {
+            steps {
+                script {
+                    echo "============================================"
+                    echo "Build Information"
+                    echo "============================================"
+                    echo "Build Number: ${env.BUILD_NUMBER}"
+                    echo "Branch: ${env.BRANCH_NAME}"
+                    echo "Workspace: ${env.WORKSPACE}"
+                    echo "============================================"
+                    
+                    sh '''
+                        echo "Tool Versions:"
+                        docker --version
+                        kubectl version --client
+                        helm version
+                        terraform version
+                        az version --output table || echo "Azure CLI: Not configured"
+                        aws --version
+                    '''
+                }
+            }
+        }
+
+        stage('📥 SCM Checkout') {
+            steps {
+                echo "Checking out source code..."
+                checkout scm
+                
+                // Alternative: Git checkout with specific branch
+                // git branch: 'main', url: 'https://github.com/your-org/your-repo.git'
+            }
+        }
+
+        stage('🔍 Code Quality') {
+            parallel {
+                stage('Lint Dockerfile') {
+                    when {
+                        expression { fileExists('Dockerfile') }
+                    }
+                    steps {
+                        echo "Linting Dockerfile..."
+                        sh 'hadolint Dockerfile || true'
+                    }
+                }
+                
+                stage('Validate YAML') {
+                    when {
+                        expression { fileExists('k8s') || fileExists('helm') }
+                    }
+                    steps {
+                        echo "Validating YAML files..."
+                        sh '''
+                            find . -name "*.yaml" -o -name "*.yml" | while read file; do
+                                echo "Validating: $file"
+                                yq eval '.' "$file" > /dev/null || echo "Invalid YAML: $file"
+                            done
+                        '''
+                    }
+                }
+            }
+        }
+
+        stage('🏗️ Build Docker Image') {
+            steps {
+                echo "Building Docker image..."
+                script {
+                    sh """
+                        docker build \
+                            -t ${DOCKER_IMAGE}:${BUILD_NUMBER} \
+                            -t ${DOCKER_IMAGE}:latest \
+                            --build-arg BUILD_DATE=\$(date -u +'%Y-%m-%dT%H:%M:%SZ') \
+                            --build-arg VCS_REF=\$(git rev-parse --short HEAD) \
+                            --build-arg BUILD_NUMBER=${BUILD_NUMBER} \
+                            .
+                    """
+                }
+            }
+        }
+
+        stage('🔬 Analyze Image') {
+            steps {
+                echo "Analyzing Docker image..."
+                sh """
+                    echo "Image size and layers:"
+                    docker images ${DOCKER_IMAGE}:${BUILD_NUMBER}
+                """
+            }
+        }
+
+        stage('🔒 Security Scan') {
+            steps {
+                echo "Scanning for vulnerabilities..."
+                script {
+                    def scanResult = sh(
+                        script: "trivy image --severity HIGH,CRITICAL ${DOCKER_IMAGE}:${BUILD_NUMBER}",
+                        returnStatus: true
+                    )
+                    
+                    if (scanResult != 0) {
+                        echo "⚠️ Security vulnerabilities found! Review the scan results."
+                        // Uncomment to fail on vulnerabilities:
+                        // error("Security scan failed!")
+                    } else {
+                        echo "✅ No critical vulnerabilities found."
+                    }
+                }
+            }
+        }
+
+        stage('🧪 Test') {
+            steps {
+                echo "Running tests..."
+                script {
+                    // Example: Run tests inside the built container
+                    sh """
+                        docker run --rm ${DOCKER_IMAGE}:${BUILD_NUMBER} \
+                            echo "Running test suite..." 
+                        # Add your actual test commands here
+                    """
+                }
+            }
+        }
+
+        stage('🔐 Docker Login') {
+            steps {
+                echo "Logging in to Docker Hub..."
+                withCredentials([usernamePassword(
+                    credentialsId: 'DOCKERHUB_CREDENTIALS',
+                    usernameVariable: 'DOCKER_USERNAME',
+                    passwordVariable: 'DOCKER_PASSWORD'
+                )]) {
+                    sh '''
+                        echo "$DOCKER_PASSWORD" | docker login -u "$DOCKER_USERNAME" --password-stdin
+                    '''
+                }
+            }
+        }
+
+        stage('📤 Push Docker Image') {
+            steps {
+                echo "Pushing Docker image to registry..."
+                sh """
+                    docker push ${DOCKER_IMAGE}:${BUILD_NUMBER}
+                    docker push ${DOCKER_IMAGE}:latest
+                """
+            }
+        }
+
+        stage('🚀 Deploy') {
+            when {
+                branch 'main'
+            }
+            steps {
+                echo "Deploying application..."
+                
+                script {
+                    // Choose your deployment method:
+                    
+                    // Option 1: Kubernetes with kubectl
+                    // withCredentials([file(credentialsId: 'KUBECONFIG', variable: 'KUBECONFIG')]) {
+                    //     sh """
+                    //         export KUBECONFIG=\$KUBECONFIG
+                    //         kubectl set image deployment/${APP_NAME} \
+                    //             ${APP_NAME}=${DOCKER_IMAGE}:${BUILD_NUMBER} \
+                    //             -n ${K8S_NAMESPACE}
+                    //         kubectl rollout status deployment/${APP_NAME} -n ${K8S_NAMESPACE}
+                    //     """
+                    // }
+                    
+                    // Option 2: Helm deployment
+                    // withCredentials([file(credentialsId: 'KUBECONFIG', variable: 'KUBECONFIG')]) {
+                    //     sh """
+                    //         export KUBECONFIG=\$KUBECONFIG
+                    //         helm upgrade --install ${HELM_RELEASE_NAME} ./helm-chart \
+                    //             --namespace ${K8S_NAMESPACE} \
+                    //             --set image.tag=${BUILD_NUMBER} \
+                    //             --set image.repository=${DOCKER_IMAGE} \
+                    //             --wait \
+                    //             --timeout 5m
+                    //     """
+                    // }
+                    
+                    // Option 3: Deploy to AWS ECS
+                    // withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', 
+                    //                   credentialsId: 'AWS_CREDENTIALS']]) {
+                    //     sh """
+                    //         aws ecs update-service \
+                    //             --cluster my-cluster \
+                    //             --service ${APP_NAME} \
+                    //             --force-new-deployment
+                    //     """
+                    // }
+                    
+                    echo "✅ Deployment completed!"
+                }
+            }
+        }
+
+        stage('🧹 Cleanup Local Images') {
+            steps {
+                echo "Cleaning up local Docker images..."
+                sh """
+                    # Remove old images to save space
+                    docker image prune -f --filter "until=24h"
+                    
+                    # Optional: Remove the images we just built
+                    # docker rmi ${DOCKER_IMAGE}:${BUILD_NUMBER} || true
+                """
+            }
+        }
+    }
+
+    post {
+        always {
+            echo "Pipeline execution completed."
+            
+            // Docker logout
+            sh 'docker logout || true'
+            
+            // Clean workspace (optional)
+            // cleanWs()
+        }
+        
+        success {
+            echo "✅ Pipeline succeeded!"
+            
+            // Send notification (Slack, Email, etc.)
+            // slackSend(color: 'good', message: "Build ${BUILD_NUMBER} succeeded!")
+        }
+        
+        failure {
+            echo "❌ Pipeline failed!"
+            
+            // Send failure notification
+            // slackSend(color: 'danger', message: "Build ${BUILD_NUMBER} failed!")
+        }
+        
+        unstable {
+            echo "⚠️ Pipeline is unstable!"
+        }
+    }
+}

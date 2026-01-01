@@ -1,0 +1,56 @@
+# Ignore build artifacts
+*.tar.gz
+*.zip
+
+# Ignore logs
+*.log
+
+# Ignore IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Ignore OS files
+.DS_Store
+Thumbs.db
+
+# Ignore sensitive files
+*.pem
+*.key
+secrets/
+credentials/
+
+# Ignore local environment files
+.env
+.env.local
+
+# Ignore Jenkins home data if mounted locally
+jenkins_home/
+
+# Ignore terraform files
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+
+# Ignore kubeconfig
+kubeconfig
+*.kubeconfig
+
+# Ignore node modules if testing scripts
+node_modules/
+
+# Ignore Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+
+# Ignore Docker volumes
+volumes/

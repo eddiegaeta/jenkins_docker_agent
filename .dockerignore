@@ -1,0 +1,40 @@
+# Git files
+.git
+.gitignore
+.github
+
+# Documentation
+README.md
+CHANGELOG.md
+CONTRIBUTING.md
+QUICKSTART.md
+LICENSE
+
+# CI/CD
+.github/
+examples/
+
+# Docker files
+docker-compose.yml
+jenkins-casc.yaml
+
+# Build scripts
+build.sh
+push.sh
+Makefile
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temp files
+*.log
+*.tmp
+
+# Version file (can include if needed in image)
+# VERSION

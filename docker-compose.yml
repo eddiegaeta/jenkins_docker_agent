@@ -1,0 +1,43 @@
+version: '3.8'
+
+services:
+  jenkins-controller:
+    image: jenkins/jenkins:lts
+    container_name: jenkins-controller
+    restart: unless-stopped
+    privileged: true
+    user: root
+    ports:
+      - "8080:8080"
+      - "50000:50000"
+    volumes:
+      - jenkins_home:/var/jenkins_home
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./jenkins-casc.yaml:/var/jenkins_home/casc_configs/jenkins-casc.yaml:ro
+    environment:
+      - JAVA_OPTS=-Djenkins.install.runSetupWizard=false
+      - CASC_JENKINS_CONFIG=/var/jenkins_home/casc_configs/jenkins-casc.yaml
+    networks:
+      - jenkins
+
+  # Optional: Docker registry for local development
+  registry:
+    image: registry:2
+    container_name: docker-registry
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    volumes:
+      - registry_data:/var/lib/registry
+    networks:
+      - jenkins
+
+volumes:
+  jenkins_home:
+    driver: local
+  registry_data:
+    driver: local
+
+networks:
+  jenkins:
+    driver: bridge
