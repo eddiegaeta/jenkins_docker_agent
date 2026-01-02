@@ -66,8 +66,11 @@ RUN curl -fsSL https://deb.nodesource.com/setup_lts.x | bash - && \
     apt-get install -y nodejs && \
     rm -rf /var/lib/apt/lists/*
 
-# Install useful Python packages
-RUN pip3 install --no-cache-dir --upgrade pip setuptools wheel && \
+# Install useful Python packages (use --break-system-packages for Debian 12+)
+RUN pip3 install --no-cache-dir --break-system-packages \
+    pyyaml \
+    requests \
+    boto3 || \
     pip3 install --no-cache-dir \
     pyyaml \
     requests \
