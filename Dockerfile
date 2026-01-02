@@ -76,17 +76,34 @@ RUN pip3 install --no-cache-dir --break-system-packages \
     requests \
     boto3
 
-# Install dive (Docker image analysis tool)
-RUN wget https://github.com/wagoodman/dive/releases/download/v0.11.0/dive_0.11.0_linux_amd64.deb && \
-    apt-get update && apt-get install -y ./dive_0.11.0_linux_amd64.deb && \
-    rm dive_0.11.0_linux_amd64.deb && \
-    rm -rf /var/lib/apt/lists/*
+# Install dive (Docker image analysis tool) - architecture aware
+ENV DIVE_VERSION=0.11.0
+RUN set -e; \
+        ARCH=$(dpkg --print-architecture); \
+        case "$ARCH" in \
+            amd64) DIVE_PKG="dive_${DIVE_VERSION}_linux_amd64.deb" ;; \
+            arm64) DIVE_PKG="dive_${DIVE_VERSION}_linux_arm64.deb" ;; \
+            *) echo "Unsupported architecture: $ARCH" && exit 1 ;; \
+        esac; \
+        wget -q https://github.com/wagoodman/dive/releases/download/v${DIVE_VERSION}/${DIVE_PKG} && \
+        apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y ./${DIVE_PKG} && \
+        rm -f ${DIVE_PKG} && \
+        rm -rf /var/lib/apt/lists/*
 
-# Install trivy (vulnerability scanner) - using direct binary installation
-RUN wget -qO trivy.tar.gz https://github.com/aquasecurity/trivy/releases/download/v0.48.3/trivy_0.48.3_Linux-64bit.tar.gz && \
-    tar -xzf trivy.tar.gz -C /usr/local/bin trivy && \
-    rm trivy.tar.gz && \
-    chmod +x /usr/local/bin/trivy
+# Install trivy (vulnerability scanner) - architecture aware binary
+ENV TRIVY_VERSION=0.48.3
+RUN set -e; \
+        ARCH=$(uname -m); \
+        case "$ARCH" in \
+            x86_64|amd64) TRIVY_PKG="trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz" ;; \
+            aarch64|arm64) TRIVY_PKG="trivy_${TRIVY_VERSION}_Linux-ARM64.tar.gz" ;; \
+            *) echo "Unsupported architecture: $ARCH" && exit 1 ;; \
+        esac; \
+        wget -q https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/${TRIVY_PKG} && \
+        tar -xzf ${TRIVY_PKG} trivy && \
+        mv trivy /usr/local/bin/ && \
+        rm -f ${TRIVY_PKG} && \
+        chmod +x /usr/local/bin/trivy
 
 # Install hadolint (Dockerfile linter)
 RUN wget -O /usr/local/bin/hadolint https://github.com/hadolint/hadolint/releases/download/v2.12.0/hadolint-Linux-x86_64 && \
