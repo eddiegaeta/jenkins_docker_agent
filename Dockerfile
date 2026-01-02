@@ -17,6 +17,8 @@ RUN apt-get update && apt-get install -y \
     make \
     python3 \
     python3-pip \
+    python3-dev \
+    build-essential \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Docker CLI
@@ -65,11 +67,11 @@ RUN curl -fsSL https://deb.nodesource.com/setup_lts.x | bash - && \
     rm -rf /var/lib/apt/lists/*
 
 # Install useful Python packages
-RUN pip3 install --no-cache-dir \
+RUN pip3 install --no-cache-dir --upgrade pip setuptools wheel && \
+    pip3 install --no-cache-dir \
     pyyaml \
     requests \
-    boto3 \
-    azure-cli-core
+    boto3
 
 # Install dive (Docker image analysis tool)
 RUN wget https://github.com/wagoodman/dive/releases/download/v0.11.0/dive_0.11.0_linux_amd64.deb && \
