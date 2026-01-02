@@ -82,11 +82,11 @@ RUN wget https://github.com/wagoodman/dive/releases/download/v0.11.0/dive_0.11.0
     rm dive_0.11.0_linux_amd64.deb && \
     rm -rf /var/lib/apt/lists/*
 
-# Install trivy (vulnerability scanner)
-RUN wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | gpg --dearmor -o /usr/share/keyrings/trivy.gpg && \
-    echo "deb [signed-by=/usr/share/keyrings/trivy.gpg] https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main" | tee -a /etc/apt/sources.list.d/trivy.list && \
-    apt-get update && apt-get install -y trivy && \
-    rm -rf /var/lib/apt/lists/*
+# Install trivy (vulnerability scanner) - using direct binary installation
+RUN wget -qO trivy.tar.gz https://github.com/aquasecurity/trivy/releases/download/v0.48.3/trivy_0.48.3_Linux-64bit.tar.gz && \
+    tar -xzf trivy.tar.gz -C /usr/local/bin trivy && \
+    rm trivy.tar.gz && \
+    chmod +x /usr/local/bin/trivy
 
 # Install hadolint (Dockerfile linter)
 RUN wget -O /usr/local/bin/hadolint https://github.com/hadolint/hadolint/releases/download/v2.12.0/hadolint-Linux-x86_64 && \
