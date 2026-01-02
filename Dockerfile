@@ -9,7 +9,6 @@ RUN apt-get update && apt-get install -y \
     curl \
     gnupg \
     lsb-release \
-    software-properties-common \
     wget \
     git \
     vim \
